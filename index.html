@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>班表</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0f0f14;--surface:#16161e;--surface2:#1c1c26;--border:#252535;
+    --accent:#f5c842;--red:#e05c5c;--green:#5cbf8a;--blue:#5c9ee0;
+    --purple:#a07adb;--text:#e8e8f0;--text-muted:#7a7a9a;--text-dim:#4a4a6a;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{background:var(--bg);color:var(--text);font-family:'Noto Sans TC',sans-serif;min-height:100vh;}
+
+  .header{background:var(--surface2);border-bottom:1px solid var(--border);padding:14px 16px 0;position:sticky;top:0;z-index:50;}
+  .header-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .month-label{font-family:'DM Mono',monospace;font-size:22px;font-weight:500;color:var(--accent);}
+  .sub-label{font-size:12px;color:var(--text-muted);margin-left:8px;}
+  .refresh-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text-muted);font-size:12px;padding:6px 12px;cursor:pointer;font-family:inherit;flex-shrink:0;}
+  .refresh-btn:active{opacity:.7;}
+  .stats-row{font-size:11px;color:var(--text-dim);display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;}
+  .stats-row b{color:var(--accent);font-weight:500;}
+
+  .month-tabs{display:flex;gap:0;overflow-x:auto;scrollbar-width:none;-ms-overflow-style:none;margin:0 -16px;padding:0 16px;}
+  .month-tabs::-webkit-scrollbar{display:none;}
+  .tab{flex-shrink:0;padding:8px 16px;font-size:12px;font-weight:500;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;font-family:'DM Mono',monospace;transition:all .2s;white-space:nowrap;}
+  .tab:hover{color:var(--text-muted);}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+  .loading{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:80px 20px;gap:12px;color:var(--text-muted);font-size:14px;}
+  .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;}
+  .loading-sub{font-size:11px;color:var(--text-dim);}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+
+  .err{margin:16px;background:rgba(224,92,92,.08);border:1px solid rgba(224,92,92,.2);border-radius:10px;padding:14px;font-size:12px;color:var(--red);display:none;line-height:1.8;}
+
+  .content{padding:12px 0 60px;}
+  .legend{margin:0 12px 14px;display:flex;gap:12px;flex-wrap:wrap;padding:10px 14px;background:var(--surface);border:1px solid var(--border);border-radius:10px;}
+  .leg{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text-muted);}
+  .ld{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;}
+
+  .group{margin:0 12px 18px;border-radius:14px;overflow:hidden;border:1px solid var(--border);background:var(--surface);animation:fadeUp .3s ease both;}
+  .group:nth-child(3){animation-delay:.07s;}
+  .group-head{display:flex;align-items:center;gap:10px;padding:11px 14px;background:var(--surface2);border-bottom:1px solid var(--border);}
+  .gbadge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:99px;font-family:'DM Mono',monospace;}
+  .bt{background:rgba(92,158,224,.15);color:var(--blue);border:1px solid rgba(92,158,224,.3);}
+  .btc{background:rgba(160,122,219,.15);color:var(--purple);border:1px solid rgba(160,122,219,.3);}
+  .gname{font-size:13px;color:var(--text-muted);font-weight:300;}
+
+  .ecard{border-bottom:1px solid var(--border);padding:12px 14px;}
+  .ecard:last-child{border-bottom:none;}
+  .einfo{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+  .ename{font-size:15px;font-weight:500;}
+  .ehours{font-size:11px;color:var(--text-dim);margin-top:2px;font-family:'DM Mono',monospace;}
+  .offc{font-size:11px;color:var(--text-dim);}
+  .offc b{color:var(--red);font-size:13px;font-weight:500;}
+
+  .cal{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;}
+  .cwd{text-align:center;font-size:9px;color:var(--text-dim);padding:2px 0 4px;font-family:'DM Mono',monospace;}
+  .cwd.sun{color:rgba(224,92,92,.5);}.cwd.sat{color:rgba(92,92,224,.5);}
+  .cd{border-radius:7px;padding:3px 1px;background:rgba(255,255,255,.02);min-height:46px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;}
+  .cd.sun{background:rgba(224,92,92,.05);}.cd.sat{background:rgba(92,92,224,.05);}
+  .cd.emp{background:transparent;}
+  .cd.today{box-shadow:inset 0 0 0 1.5px var(--accent);}
+  .dn{font-family:'DM Mono',monospace;font-size:10px;color:var(--text-dim);line-height:1;}
+  .cd.sun .dn{color:rgba(224,92,92,.45);}.cd.sat .dn{color:rgba(92,92,224,.45);}.cd.today .dn{color:var(--accent);}
+  .sb{font-size:11px;font-weight:600;line-height:1;text-align:center;}
+  .so{color:var(--red);}.sbd{color:var(--accent);}.sy{color:var(--blue);font-size:9px;}
+  .sf{color:#e8854a;font-size:8px;line-height:1.2;text-align:center;}
+  .sw{color:var(--green);font-size:9px;line-height:1.2;white-space:nowrap;overflow:hidden;max-width:34px;text-overflow:ellipsis;text-align:center;}
+  .sn{color:var(--text-muted);font-size:8px;white-space:nowrap;overflow:hidden;max-width:34px;text-overflow:ellipsis;text-align:center;}
+  .sx{color:transparent;font-size:10px;text-align:center;}
+  .upd{text-align:center;font-size:10px;color:var(--text-dim);padding:8px;font-family:'DM Mono',monospace;}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <div>
+      <span class="month-label" id="mLabel">班表</span>
+      <span class="sub-label" id="mSub"></span>
+    </div>
+    <button class="refresh-btn" onclick="refreshCurrent()">↻ 更新</button>
+  </div>
+  <div class="stats-row" id="stats"></div>
+  <div class="month-tabs" id="monthTabs"></div>
+</div>
+
+<div class="loading" id="loading">
+  <div class="spinner"></div>
+  <div>讀取班表…</div>
+  <div class="loading-sub" id="loadingSub"></div>
+</div>
+<div class="err" id="err"></div>
+<div class="content" id="content" style="display:none"></div>
+
+<script>
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxD2igshVAwOHOBhBGkdDRsk1FAvSKOMKzK56XD14avXTaiy6DqGo_cjI1vu_R0Qn_X/exec';
+
+const GROUPS = {
+  taichung: { label:'台中', cls:'btc', names:['羿安','怡君','舒喬','Nana','Ines'] },
+  taipei:   { label:'台北', cls:'bt',  names:['Yuki','Maru','恒怡','涵涵'] }
+};
+
+const PART_TIME = ['羿安', '怡君']; // 兼職人員
+const WD = ['一','二','三','四','五','六','日'];
+
+let currentGid = null;
+let allSheets  = [];
+const cache    = {};
+
+// ── JSONP ─────────────────────────────────────────────────────────────────────
+function jsonp(params, onSuccess, onError) {
+  const old = document.getElementById('_gs');
+  if (old) old.remove();
+
+  const cbName = '__gs_' + Date.now();
+  const timer  = setTimeout(() => {
+    delete window[cbName];
+    onError('讀取逾時，請確認 Apps Script 已正確部署');
+  }, 12000);
+
+  window[cbName] = function(data) {
+    clearTimeout(timer);
+    delete window[cbName];
+    onSuccess(data);
+  };
+
+  const qs = Object.entries({...params, callback: cbName, t: Date.now()})
+    .map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+
+  const s   = document.createElement('script');
+  s.id      = '_gs';
+  s.src     = `${SCRIPT_URL}?${qs}`;
+  s.onerror = () => { clearTimeout(timer); delete window[cbName]; onError('無法載入 Apps Script'); };
+  document.head.appendChild(s);
+}
+
+// ── 初始化：先抓分頁列表 ──────────────────────────────────────────────────────
+function init() {
+  showLoading('讀取分頁列表…');
+  jsonp(
+    {},
+    (result) => {
+      if (!result.sheets || !result.sheets.length) {
+        showErr('找不到月份分頁，請確認試算表分頁名稱格式為 YYYY.MM（例如 2026.03）');
+        return;
+      }
+      allSheets = result.sheets;
+      buildTabs();
+    },
+    showErr
+  );
+}
+
+// ── 建立 Tabs ─────────────────────────────────────────────────────────────────
+function buildTabs() {
+  const container = document.getElementById('monthTabs');
+  container.innerHTML = '';
+
+  // 找今天對應的月份
+  const now      = new Date();
+  const nowLabel = `${now.getFullYear()}.${String(now.getMonth()+1).padStart(2,'0')}`;
+  let defaultIdx = allSheets.findIndex(s => s.name === nowLabel);
+  if (defaultIdx < 0) defaultIdx = allSheets.length - 1; // 找不到就選最後一個
+
+  allSheets.forEach((sheet, i) => {
+    const tab       = document.createElement('div');
+    tab.className   = 'tab' + (i === defaultIdx ? ' active' : '');
+    tab.textContent = sheet.name;
+    tab.dataset.gid = sheet.gid;
+    tab.onclick     = () => switchTab(sheet.gid, tab);
+    container.appendChild(tab);
+  });
+
+  // 載入預設月份
+  switchTab(allSheets[defaultIdx].gid, container.children[defaultIdx]);
+}
+
+// ── 切換分頁 ──────────────────────────────────────────────────────────────────
+function switchTab(gid, tabEl) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  tabEl.classList.add('active');
+  tabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  currentGid = gid;
+  loadSheet(gid, false);
+}
+
+function refreshCurrent() {
+  if (currentGid) {
+    delete cache[currentGid]; // 清快取強制重抓
+    loadSheet(currentGid, true);
+  }
+}
+
+// ── 載入指定分頁資料 ──────────────────────────────────────────────────────────
+function loadSheet(gid, forceRefresh) {
+  if (!forceRefresh && cache[gid]) {
+    render(cache[gid]);
+    return;
+  }
+
+  showLoading('讀取班表資料…');
+
+  jsonp(
+    { gid },
+    (result) => {
+      const data = result.data || result; // 相容舊格式
+      if (!Array.isArray(data)) { showErr('資料格式錯誤'); return; }
+      cache[gid] = data;
+      render(data);
+    },
+    showErr
+  );
+}
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+function showLoading(msg) {
+  document.getElementById('loading').style.display = 'flex';
+  document.getElementById('content').style.display = 'none';
+  document.getElementById('err').style.display     = 'none';
+  document.getElementById('loadingSub').textContent = msg || '';
+}
+
+function showErr(msg) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('err').innerHTML = '⚠️ ' + msg;
+  document.getElementById('err').style.display = 'block';
+}
+
+// ── 解析 ──────────────────────────────────────────────────────────────────────
+function detectMonth(rows) {
+  for (const cell of (rows[0]||[]))
+    { const m = String(cell).match(/(\d{4})\/(\d{2})/); if(m) return {y:+m[1],mo:+m[2]}; }
+  const n = new Date(); return {y:n.getFullYear(),mo:n.getMonth()+1};
+}
+
+function findDayCol(rows) {
+  for (let r=0;r<rows.length;r++)
+    for (let c=0;c<rows[r].length-3;c++)
+      if (String(rows[r][c]).trim()==='1'&&String(rows[r][c+1]).trim()==='2'&&String(rows[r][c+2]).trim()==='3')
+        return {r,c};
+  return null;
+}
+
+function buildMap(rows, fc, total) {
+  const map = {};
+  for (const row of rows) {
+    const nm = String(row[2]||'').trim();
+    if (!nm||/^\d+$/.test(nm)||nm.length>20) continue;
+    const hr = String(row[3]||'').trim().replace(/^P/,'').replace(' - ','–');
+    const sh = {};
+    for (let d=1;d<=total;d++) sh[d]=String(row[fc+d-1]||'').trim();
+    if (!map[nm]) map[nm]={hr,sh};
+  }
+  return map;
+}
+
+function shtml(v) {
+  if (!v) return `<span class="sb sx">·</span>`;
+  
+  const trimmed = v.trim();
+  
+  // 特殊狀態：休（紅）、年（橘）、盤（黃）
+  if (trimmed === '休') return `<span class="sb so">休</span>`;
+  if (trimmed === '盤') return `<span class="sb sbd">盤</span>`;
+  if (trimmed === '年' || trimmed.startsWith('年')) return `<span class="sb" style="color:#e8854a">年</span>`;
+  
+  // 提取時段（任何 XX-YY 格式）
+  const timeMatch = trimmed.match(/(\d{1,2}[-:]\d{2})/);
+  const hasTime = timeMatch !== null;
+  const timeStr = hasTime ? timeMatch[1] : '';
+  const isNormalShift = timeStr === '11-20' || timeStr === '11:20';
+  
+  // 移除時段後的剩餘文字
+  let textPart = trimmed.replace(/\d{1,2}[-:]\d{2}/g, '').trim();
+  
+  // 如果沒時段，全部都是文字
+  if (!hasTime) {
+    // 會計師保持灰色，其他特殊處理
+    if (trimmed.includes('禁')) return `<span class="sb" style="color:#e8854a;font-size:8px;line-height:1.2">禁<br>9:30</span>`;
+    return `<span class="sb sn">${trimmed}</span>`;
+  }
+  
+  // 有時段的情況
+  let parts = [];
+  
+  // 時段部分：11-20 隱藏，其他顯示綠色
+  if (!isNormalShift) {
+    parts.push(`<span class="sb sw" style="display:inline">${timeStr}</span>`);
+  }
+  
+  // 文字部分：有文字就顯示（灰色）
+  if (textPart) {
+    if (parts.length > 0) parts.push('<br>'); // 時段和文字換行
+    parts.push(`<span class="sb sn" style="display:inline">${textPart}</span>`);
+  }
+  
+  // 如果是純 11-20 沒有其他文字 → 隱藏
+  if (isNormalShift && !textPart) {
+    return `<span class="sb sx">·</span>`;
+  }
+  
+  return parts.length > 0 ? `<span class="sb" style="display:flex;flex-direction:column;align-items:center;gap:2px">${parts.join('')}</span>` : `<span class="sb sx">·</span>`;
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function render(rows) {
+  const {y,mo} = detectMonth(rows);
+  const total  = new Date(y,mo,0).getDate();
+  let sw       = new Date(y,mo-1,1).getDay();
+  sw = sw === 0 ? 6 : sw - 1; // 轉為週一開始 (Mon=0, Sun=6)
+  
+  const dc     = findDayCol(rows);
+  if (!dc) { showErr('找不到日期欄位，試算表格式可能有變動'); return; }
+  const map    = buildMap(rows,dc.c,total);
+
+  document.getElementById('mLabel').textContent = `${y} / ${String(mo).padStart(2,'0')}`;
+  document.getElementById('mSub').textContent   = '班表';
+  document.getElementById('stats').innerHTML    = '';
+
+  const now   = new Date();
+  const same  = now.getFullYear()===y && now.getMonth()+1===mo;
+  const today = same ? now.getDate() : -1;
+  const cont  = document.getElementById('content');
+
+  cont.innerHTML = ''; // 移除 legend
+
+  for (const g of Object.values(GROUPS)) {
+    let cards = '';
+    let todayWorkCount = 0;
+
+    for (const tgt of g.names) {
+      const key = Object.keys(map).find(k=>k===tgt||k.startsWith(tgt)||k.includes(tgt));
+      const emp = key ? map[key] : null;
+      let offs  = 0;
+      let totalHours = 0; // 兼職總時數
+
+      if (emp) {
+        for (let d=1; d<=total; d++) {
+          const s = emp.sh[d];
+          if (s==='休'||s==='年'||s.startsWith('年')) {
+            offs++;
+          } else if (PART_TIME.includes(tgt) && s.match(/\d{1,2}[-:]\d{2}/)) {
+            // 計算兼職時數：解析 "11-20" 格式
+            const m = s.match(/(\d{1,2})[-:](\d{2})/);
+            if (m) {
+              const start = parseInt(m[1]);
+              const end   = parseInt(m[2].slice(0,2));
+              let hours   = (end >= start) ? (end - start) : (24 - start + end);
+              // 超過4小時強制休息1小時
+              if (hours > 4) hours -= 1;
+              totalHours += hours;
+            }
+          }
+          // 計算今天上班人數
+          if (d === today && s && s!=='休' && !s.startsWith('年')) todayWorkCount++;
+        }
+      }
+
+      // 只顯示非 11-20、POS、外 的工時
+      let showHours = '';
+      if (emp && emp.hr) {
+        const hr = emp.hr.trim();
+        if (hr !== '11:00–20:00' && hr !== 'POS' && hr !== '外') {
+          showHours = hr;
+        }
+      }
+
+      let cal = '<div class="cal">';
+      WD.forEach((w,i) => {
+        const isSun = i === 6;
+        const isSat = i === 5;
+        cal += `<div class="cwd ${isSun?'sun':isSat?'sat':''}">${w}</div>`;
+      });
+      
+      for (let e=0; e<sw; e++) cal += `<div class="cd emp"></div>`;
+      
+      for (let d=1; d<=total; d++) {
+        const wd = (sw + d - 1) % 7;
+        const isSun = wd === 6;
+        const isSat = wd === 5;
+        const isToday = d === today;
+        cal += `<div class="cd ${isSun?'sun':''} ${isSat?'sat':''} ${isToday?'today':''}">
+          <div class="dn">${d}</div>${shtml(emp?emp.sh[d]:'')}
+        </div>`;
+      }
+      
+      const rem = (7 - ((sw+total) % 7)) % 7;
+      for (let e=0; e<rem; e++) cal += `<div class="cd emp"></div>`;
+      cal += '</div>';
+
+      // 兼職顯示總時數（淡藍色數字）
+      const offInfo = PART_TIME.includes(tgt) 
+        ? `休 <b>${offs}</b> 天 · <b style="color:#7db8e8">${totalHours}</b> 小時`
+        : `休 <b>${offs}</b> 天`;
+
+      cards += `<div class="ecard">
+        <div class="einfo">
+          <div><div class="ename">${key||tgt}</div>${showHours?`<div class="ehours">${showHours}</div>`:''}</div>
+          <div class="offc">${offInfo}</div>
+        </div>${cal}</div>`;
+    }
+    
+    cont.innerHTML += `<div class="group">
+      <div class="group-head">
+        <span class="gbadge ${g.cls}">${g.label}</span>
+        <span class="gname">今天 <b style="color:var(--green)">${todayWorkCount}</b> 人上班</span>
+      </div>${cards}</div>`;
+  }
+
+  cont.innerHTML += `<div class="upd">最後更新 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}</div>`;
+  document.getElementById('loading').style.display = 'none';
+  cont.style.display = 'block';
+}
+
+// ── 啟動 ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
