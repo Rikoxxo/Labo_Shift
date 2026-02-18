@@ -291,13 +291,12 @@ function shtml(v) {
   
   // 時段部分：11-20 隱藏，其他顯示綠色
   if (!isNormalShift) {
-    parts.push(`<span class="sb sw" style="display:inline">${timeStr}</span>`);
+    parts.push(`<div style="line-height:1">${timeStr}</div>`);
   }
   
   // 文字部分：有文字就顯示（灰色）
   if (textPart) {
-    if (parts.length > 0) parts.push('<br>'); // 時段和文字換行
-    parts.push(`<span class="sb sn" style="display:inline">${textPart}</span>`);
+    parts.push(`<div style="line-height:1;color:var(--text-muted);font-size:8px">${textPart}</div>`);
   }
   
   // 如果是純 11-20 沒有其他文字 → 隱藏
@@ -305,7 +304,7 @@ function shtml(v) {
     return `<span class="sb sx">·</span>`;
   }
   
-  return parts.length > 0 ? `<span class="sb" style="display:flex;flex-direction:column;align-items:center;gap:0px">${parts.join('')}</span>` : `<span class="sb sx">·</span>`;
+  return parts.length > 0 ? `<span class="sb sw" style="display:flex;flex-direction:column;align-items:center;gap:2px">${parts.join('')}</span>` : `<span class="sb sx">·</span>`;
 }
 
 // ── Render ────────────────────────────────────────────────────────────────────
