@@ -43,13 +43,13 @@
 
     /* 頂部導航 */
     .header {
-      background: rgba(22, 22, 30, 0.9);
+      background: rgba(22, 22, 30, 0.95);
       backdrop-filter: blur(10px);
       border-bottom: 1px solid var(--border);
       padding: 14px 16px 0;
       position: sticky;
       top: 0;
-      z-index: 100;
+      z-index: 1000;
     }
 
     .header-top {
@@ -129,7 +129,7 @@
     .group {
       margin: 0 12px 18px;
       border-radius: 14px;
-      overflow: hidden;
+      overflow: visible;
       border: 1px solid var(--border);
       background: var(--surface);
       animation: fadeUp 0.4s ease both;
@@ -147,13 +147,22 @@
       }
     }
 
+    /* 修改點：讓 group-head 凍結在頂部 */
     .group-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 11px 14px;
-      background: var(--surface2);
+      background: rgba(28, 28, 38, 0.95);
+      /* surface2 */
+      backdrop-filter: blur(8px);
       border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 96px;
+      /* 這裡的數值對應 .header 的高度 (約 96px) */
+      z-index: 500;
+      border-top-left-radius: 14px;
+      border-top-right-radius: 14px;
     }
 
     .gbadge {
@@ -186,10 +195,13 @@
     .ecard {
       border-bottom: 1px solid var(--border);
       padding: 12px 14px;
+      background: var(--surface);
     }
 
     .ecard:last-child {
       border-bottom: none;
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
     }
 
     .einfo {
@@ -237,7 +249,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      z-index: 1000;
+      z-index: 2000;
       transition: opacity 0.3s;
     }
 
@@ -272,7 +284,6 @@
       font-family: 'DM Mono', monospace;
     }
 
-    /* 只有帶日期的才有底色，空白格 (.empty) 為透明 */
     .cd {
       border-radius: 8px;
       padding: 5px 2px;
@@ -293,7 +304,6 @@
       background: transparent;
     }
 
-    /* 點選與今天標示 */
     .cd.selected {
       background: rgba(245, 200, 66, 0.1);
       box-shadow: inset 0 0 0 1px rgba(245, 200, 66, 0.3);
@@ -320,7 +330,6 @@
       color: var(--accent);
     }
 
-    /* 班表文字狀態 */
     .sb {
       font-size: 11px;
       font-weight: 600;
@@ -564,7 +573,6 @@
         </div>`;
         }
 
-        // 格式化人數統計列：無論是否為今天，日期/今天文字都用白色，且與後方保持空格
         const labelText = (targetDay === today) ? '今天' : `${mo} / ${targetDay}`;
         const dateTitle = `<span style="color:#fff">${labelText}</span>&nbsp;`;
 
@@ -584,11 +592,7 @@
 
     function generateCalendar(sw, total, today, targetDay, emp) {
       let h = WD.map(w => `<div class="cwd">${w}</div>`).join('');
-
-      // 空白格子使用 .empty 類別，移除底色
       for (let e = 0; e < sw; e++) h += `<div class="cd empty"></div>`;
-
-      // 日期格子使用 .has-date 類別，保留底色
       for (let d = 1; d <= total; d++) {
         const isToday = d === today;
         const isSelected = d === targetDay;
@@ -604,38 +608,20 @@
     function renderShift(v) {
       if (!v) return `<span class="dot">·</span>`;
       const trimmed = v.trim();
-
       if (trimmed === '休') return `<span class="sb" style="color:var(--red)">休</span>`;
       if (trimmed === '盤') return `<span class="sb" style="color:var(--accent)">盤</span>`;
       if (trimmed.includes('年')) return `<span class="sb" style="color:#e8854a">年</span>`;
-
-      if (trimmed.includes('禁')) {
-        return `<div class="sb"><span class="time-tag">9:30</span><span class="memo-tag">禁</span></div>`;
-      }
-
+      if (trimmed.includes('禁')) return `<div class="sb"><span class="time-tag">9:30</span><span class="memo-tag">禁</span></div>`;
       const timeMatch = trimmed.match(/(\d{1,2}[-:]\d{2})/);
       const hasTime = !!timeMatch;
       const timeStr = hasTime ? timeMatch[1] : '';
       const isNormalShift = timeStr === '11-20' || timeStr === '11:20';
-
       let textPart = trimmed.replace(/\d{1,2}[-:]\d{2}/g, '').trim();
       let parts = [];
-
-      if (hasTime && !isNormalShift) {
-        parts.push(`<span class="time-tag">${timeStr}</span>`);
-      }
-
-      if (textPart) {
-        parts.push(`<span class="memo-tag">${textPart}</span>`);
-      }
-
-      if (isNormalShift && !textPart) {
-        return `<span class="dot">·</span>`;
-      }
-
-      return parts.length > 0
-        ? `<div class="sb">${parts.join('')}</div>`
-        : `<span class="dot">·</span>`;
+      if (hasTime && !isNormalShift) parts.push(`<span class="time-tag">${timeStr}</span>`);
+      if (textPart) parts.push(`<span class="memo-tag">${textPart}</span>`);
+      if (isNormalShift && !textPart) return `<span class="dot">·</span>`;
+      return parts.length > 0 ? `<div class="sb">${parts.join('')}</div>` : `<span class="dot">·</span>`;
     }
 
     function calcPtHours(s) {
