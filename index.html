@@ -4,6 +4,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <!-- iPhone/iPad 桌面圖示 - 已更新為簡約線條風格 -->
+  <link rel="apple-touch-icon" href="https://img.icons8.com/sf-regular/180/calendar.png">
+  <!-- Android 桌面圖示 - 同步更新為簡約風格 -->
+  <link rel="icon" type="image/png" sizes="192x192" href="https://img.icons8.com/sf-regular/192/calendar.png">
+  <meta name="apple-mobile-web-app-title" content="班表Pro">
+
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>班表系統 Pro</title>
@@ -147,19 +154,17 @@
       }
     }
 
-    /* 修改點：讓 group-head 凍結在頂部 */
+    /* 凍結統計列 */
     .group-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
       padding: 11px 14px;
       background: rgba(28, 28, 38, 0.95);
-      /* surface2 */
       backdrop-filter: blur(8px);
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 96px;
-      /* 這裡的數值對應 .header 的高度 (約 96px) */
       z-index: 500;
       border-top-left-radius: 14px;
       border-top-right-radius: 14px;
@@ -237,7 +242,7 @@
       font-weight: 500;
     }
 
-    /* 轉圈圈 */
+    /* 讀取動畫 */
     .loading-overlay {
       position: fixed;
       top: 0;
@@ -268,7 +273,7 @@
       }
     }
 
-    /* 日曆網格 */
+    /* 日曆 */
     .cal {
       display: grid;
       grid-template-columns: repeat(7, 1fr);
@@ -430,26 +435,18 @@
       const container = document.getElementById('monthTabs');
       const activeGid = currentGid;
       container.innerHTML = '';
-
       const now = new Date();
       const nowLabel = `${now.getFullYear()}.${String(now.getMonth() + 1).padStart(2, '0')}`;
       let defaultIdx = allSheets.findIndex(s => s.name === nowLabel);
       if (defaultIdx < 0) defaultIdx = allSheets.length - 1;
-
       allSheets.forEach((sheet, i) => {
         const tab = document.createElement('div');
         const isThisActive = (activeGid ? sheet.gid == activeGid : i === defaultIdx);
         tab.className = 'tab' + (isThisActive ? ' active' : '');
         tab.textContent = sheet.name;
-        tab.onclick = () => {
-          selectedDay = null;
-          switchTab(sheet.gid, tab);
-        };
+        tab.onclick = () => { selectedDay = null; switchTab(sheet.gid, tab); };
         container.appendChild(tab);
-        if (isThisActive && !activeGid) {
-          currentGid = sheet.gid;
-          switchTab(sheet.gid, tab);
-        }
+        if (isThisActive && !activeGid) { currentGid = sheet.gid; switchTab(sheet.gid, tab); }
       });
     }
 
@@ -458,7 +455,6 @@
       tabEl.classList.add('active');
       tabEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
       currentGid = gid;
-
       const cachedData = localStorage.getItem(`roster_data_${gid}`);
       if (cachedData) {
         currentData = JSON.parse(cachedData);
@@ -478,15 +474,10 @@
         localStorage.setItem(`roster_data_${gid}`, JSON.stringify(data));
         render(data);
         hideLoading();
-      }, (err) => {
-        hideLoading();
-        console.error(err);
-      });
+      }, (err) => { hideLoading(); console.error(err); });
     }
 
-    function refreshCurrent() {
-      if (currentGid) loadSheet(currentGid, true);
-    }
+    function refreshCurrent() { if (currentGid) loadSheet(currentGid, true); }
 
     function jsonp(params, onSuccess, onError) {
       const cbName = '__gs_' + Date.now() + Math.floor(Math.random() * 1000);
@@ -502,90 +493,56 @@
     function showLoading() { document.getElementById('loadingOverlay').style.opacity = '1'; document.getElementById('loadingOverlay').style.pointerEvents = 'all'; }
     function hideLoading() { document.getElementById('loadingOverlay').style.opacity = '0'; document.getElementById('loadingOverlay').style.pointerEvents = 'none'; }
 
-    function selectDate(day) {
-      selectedDay = day;
-      render(currentData);
-    }
+    function selectDate(day) { selectedDay = day; render(currentData); }
 
     function render(rows) {
       const { y, mo } = detectMonth(rows);
       const total = new Date(y, mo, 0).getDate();
       let sw = new Date(y, mo - 1, 1).getDay();
       sw = sw === 0 ? 6 : sw - 1;
-
       const dc = findDayCol(rows);
       if (!dc) return;
       const map = buildMap(rows, dc.c, total);
-
       document.getElementById('mLabel').textContent = `${y} / ${String(mo).padStart(2, '0')}`;
-
       const now = new Date();
       const isCurrentMonth = (now.getFullYear() === y && now.getMonth() + 1 === mo);
       const today = isCurrentMonth ? now.getDate() : -1;
-
       const targetDay = selectedDay || (today !== -1 ? today : 1);
-
       const cont = document.getElementById('content');
       let html = '';
-
       for (const g of Object.values(GROUPS)) {
         let cards = '';
         let workOnTarget = 0;
-
         for (const name of g.names) {
           const key = Object.keys(map).find(k => k === name || k.includes(name));
           const emp = key ? map[key] : null;
           let offDays = 0, ptHours = 0;
-
           if (emp) {
             for (let d = 1; d <= total; d++) {
               const s = emp.sh[d];
-              if (s === '休' || s.includes('年')) offDays++;
+              // 如果是休假相關文字才算休假，其餘包含空格都算上班
+              const isOff = (s === '休' || s.includes('年'));
+              if (isOff) offDays++;
               else if (PART_TIME.includes(name)) ptHours += calcPtHours(s);
-              if (d === targetDay && isWorking(s)) workOnTarget++;
+
+              if (d === targetDay && !isOff) workOnTarget++;
             }
           }
-
           const calHtml = generateCalendar(sw, total, today, targetDay, emp);
-
           let showHours = '';
           if (emp && emp.hr) {
             const hr = emp.hr.trim().replace(/^P/i, '').replace('-', ' – ');
-            if (hr !== '11:00 – 20:00' && hr !== '11:00–20:00' && hr !== 'POS' && hr !== '外') {
-              showHours = hr;
-            }
+            if (hr !== '11:00 – 20:00' && hr !== '11:00–20:00' && hr !== 'POS' && hr !== '外') { showHours = hr; }
           }
-
           const statLabel = PART_TIME.includes(name)
             ? `休 <b>${offDays}</b> 天 · <b style="color:#7db8e8">${ptHours}</b> 小時`
             : `休 <b>${offDays}</b> 天`;
-
-          cards += `
-        <div class="ecard">
-          <div class="einfo">
-            <div>
-              <div class="ename">${name}</div>
-              ${showHours ? `<div class="ehours">${showHours}</div>` : ''}
-            </div>
-            <div class="offc">${statLabel}</div>
-          </div>
-          <div class="cal">${calHtml}</div>
-        </div>`;
+          cards += `<div class="ecard"><div class="einfo"><div><div class="ename">${name}</div>${showHours ? `<div class="ehours">${showHours}</div>` : ''}</div><div class="offc">${statLabel}</div></div><div class="cal">${calHtml}</div></div>`;
         }
-
         const labelText = (targetDay === today) ? '今天' : `${mo} / ${targetDay}`;
         const dateTitle = `<span style="color:#fff">${labelText}</span>&nbsp;`;
-
-        html += `
-      <div class="group">
-        <div class="group-head">
-          <span class="gbadge ${g.cls}">${g.label}</span>
-          <span class="gname">${dateTitle} <b style="color:${targetDay === today ? 'var(--green)' : 'var(--accent)'}">${workOnTarget}</b> 人上班</span>
-        </div>
-        ${cards}
-      </div>`;
+        html += `<div class="group"><div class="group-head"><span class="gbadge ${g.cls}">${g.label}</span><span class="gname">${dateTitle} <b style="color:${targetDay === today ? 'var(--green)' : 'var(--accent)'}">${workOnTarget}</b> 人上班</span></div>${cards}</div>`;
       }
-
       cont.innerHTML = html;
       document.getElementById('updFooter').textContent = `最後同步: ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')}`;
     }
@@ -597,10 +554,7 @@
         const isToday = d === today;
         const isSelected = d === targetDay;
         const shift = emp ? emp.sh[d] : '';
-        h += `<div class="cd has-date ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" onclick="selectDate(${d})">
-      <div class="dn">${d}</div>
-      ${renderShift(shift)}
-    </div>`;
+        h += `<div class="cd has-date ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" onclick="selectDate(${d})"><div class="dn">${d}</div>${renderShift(shift)}</div>`;
       }
       return h;
     }
@@ -634,17 +588,16 @@
       return h > 4 ? h - 1 : h;
     }
 
+    // 判斷是否上班：只有明確標註「休」或「年」才算休假，空格或其它文字皆視為上班
     function isWorking(s) {
-      if (!s) return false;
+      if (!s) return true; // 空格視為照常上班
       const ts = s.trim();
-      return ts !== '' && ts !== '休' && !ts.includes('年');
+      if (ts === '' || ts === ' ') return true;
+      return ts !== '休' && !ts.includes('年');
     }
 
     function detectMonth(rows) {
-      for (const cell of (rows[0] || [])) {
-        const m = String(cell).match(/(\d{4})\/(\d{2})/);
-        if (m) return { y: +m[1], mo: +m[2] };
-      }
+      for (const cell of (rows[0] || [])) { const m = String(cell).match(/(\d{4})\/(\d{2})/); if (m) return { y: +m[1], mo: +m[2] }; }
       return { y: new Date().getFullYear(), mo: new Date().getMonth() + 1 };
     }
 
