@@ -9,6 +9,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>班表系統 Pro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -91,22 +93,39 @@ const GROUPS = {
 };
 const PART_TIME = ['羿安', '怡君'];
 const WD = ['一','二','三','四','五','六','日'];
+const CACHE_PREFIX = 'laboShift.';
+const CACHE_SHEETS = CACHE_PREFIX + 'sheets';
+const CACHE_TTL = 1000 * 60 * 60 * 6;
 
 let currentGid = null;
 let allSheets = [];
 let currentData = null; 
 let selectedDay = null; 
+let loadingCount = 0;
 
 function init() {
   fetchSheets();
 }
 
 function fetchSheets() {
+  const cached = readCache(CACHE_SHEETS);
+  if (cached && cached.sheets) {
+    allSheets = cached.sheets;
+    buildTabs();
+  } else {
+    showLoading();
+  }
+
   jsonp({}, (result) => {
     if (result.sheets) {
       allSheets = result.sheets;
+      writeCache(CACHE_SHEETS, result);
       buildTabs(); 
     }
+    hideLoading();
+  }, (err) => {
+    hideLoading();
+    console.error(err);
   });
 }
 
@@ -142,24 +161,64 @@ function switchTab(gid, tabEl) {
 }
 
 function loadSheet(gid) {
-  showLoading();
+  const cacheKey = sheetCacheKey(gid);
+  const cached = readCache(cacheKey);
+  if (cached) {
+    currentData = cached;
+    render(cached);
+    hideLoading(true);
+  } else {
+    showLoading();
+  }
+
   jsonp({ gid }, (result) => {
-    currentData = result; 
-    render(result);
+    currentData = result;
+    writeCache(cacheKey, result);
+    render(result); 
     hideLoading();
   }, (err) => { hideLoading(); console.error(err); });
 }
 
-function refreshCurrent() { if (currentGid) loadSheet(currentGid); }
+function refreshCurrent() {
+  if (!currentGid) return;
+  localStorage.removeItem(sheetCacheKey(currentGid));
+  loadSheet(currentGid);
+}
 
 function jsonp(params, onSuccess, onError) {
   const cbName = '__gs_' + Date.now() + Math.floor(Math.random()*1000);
-  window[cbName] = (data) => { delete window[cbName]; onSuccess(data); };
-  const qs = Object.entries({...params, callback: cbName, t: Date.now()}).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   const s = document.createElement('script');
+  const cleanup = () => {
+    delete window[cbName];
+    s.remove();
+  };
+  window[cbName] = (data) => { cleanup(); onSuccess(data); };
+  const qs = Object.entries({...params, callback: cbName, t: Date.now()}).map(([k,v]) => `${k}=${encodeURIComponent(v)}`).join('&');
   s.src = `${SCRIPT_URL}?${qs}`;
-  s.onerror = () => onError('網路連線異常');
+  s.onerror = () => { cleanup(); if (onError) onError('網路連線異常'); };
   document.head.appendChild(s);
+}
+
+function readCache(key) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(key) || 'null');
+    if (!cached || Date.now() - cached.savedAt > CACHE_TTL) return null;
+    return cached.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeCache(key, data) {
+  try {
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data }));
+  } catch {
+    // localStorage may be full or unavailable; live data still renders normally.
+  }
+}
+
+function sheetCacheKey(gid) {
+  return CACHE_PREFIX + 'sheet.' + gid;
 }
 
 function render(result) {
@@ -192,12 +251,11 @@ function render(result) {
       if (emp) {
         for (let d = 1; d <= total; d++) {
           const s = emp.sh[d];
-          const isOff = (s === '休' || s.includes('年'));
-          if (isOff) {
+          const status = getShiftStatus(s);
+          if (status.isOff) {
             offDays++;
           } else {
             if (PART_TIME.includes(name)) ptHours += calcPtHours(s);
-            // 邏輯校正：只要非休假且是目前選擇的日期，就計入上班人數[cite: 1]
             if (d === targetDay) workOnTarget++;
           }
         }
@@ -217,7 +275,6 @@ function render(result) {
       cards += `<div class="ecard"><div class="einfo"><div><div class="ename">${name}</div>${showHours ? `<div class="ehours">${showHours}</div>` : ''}</div><div class="offc">${statLabel}</div></div><div class="cal">${calHtml}</div></div>`;
     }
     const labelText = `${mo} / ${targetDay}`;
-    // 修正點：使用 &nbsp;&nbsp;&nbsp;&nbsp; 加大日期與上班人數之間的間距[cite: 1]
     html += `
       <div class="group">
         <div class="group-head">
@@ -235,7 +292,6 @@ function render(result) {
 }
 
 function calcPtHours(s) {
-  // 兼職工時邏輯：空白計 8 小時，有時間格式則計算後減 1[cite: 1]
   if (!s || s.trim() === "") return 8; 
   const m = s.match(/(\d{1,2})[-:](\d{1,2})/);
   if (m) {
@@ -262,13 +318,22 @@ function generateCalendar(sw, total, today, targetDay, emp) {
 }
 
 function renderShift(v) {
-  if (!v || v.trim() === "") return `<span class="dot">·</span>`;
-  const t = v.trim();
-  if (t === '休') return `<span class="sb" style="color:var(--red)">休</span>`;
-  if (t.includes('年')) return `<span class="sb" style="color:#e8854a">年</span>`;
+  const status = getShiftStatus(v);
+  if (status.type === 'empty') return `<span class="dot">·</span>`;
+  if (status.type === 'off') return `<span class="sb" style="color:var(--red)">休</span>`;
+  if (status.type === 'annual') return `<span class="sb" style="color:#e8854a">年</span>`;
+  const t = status.text;
   const m = t.match(/(\d{1,2})[-:](\d{1,2})/);
   if (m) return `<div class="sb"><span class="time-tag">${m[1]}:${m[2]}</span></div>`;
   return `<span class="sb memo-tag">${t}</span>`;
+}
+
+function getShiftStatus(v) {
+  const text = String(v || '').trim();
+  if (!text) return { type: 'empty', text, isOff: false };
+  if (text.includes('休')) return { type: 'off', text, isOff: true };
+  if (text.includes('年')) return { type: 'annual', text, isOff: true };
+  return { type: 'work', text, isOff: false };
 }
 
 function selectDate(day) { selectedDay = day; render(currentData); }
@@ -289,8 +354,17 @@ function buildMap(rows, fc, total) {
   });
   return map;
 }
-function showLoading() { document.getElementById('loadingOverlay').style.opacity = '1'; document.getElementById('loadingOverlay').style.pointerEvents = 'all'; }
-function hideLoading() { document.getElementById('loadingOverlay').style.opacity = '0'; document.getElementById('loadingOverlay').style.pointerEvents = 'none'; }
+function showLoading() {
+  loadingCount++;
+  document.getElementById('loadingOverlay').style.opacity = '1';
+  document.getElementById('loadingOverlay').style.pointerEvents = 'all';
+}
+function hideLoading(force = false) {
+  loadingCount = force ? 0 : Math.max(0, loadingCount - 1);
+  if (loadingCount > 0) return;
+  document.getElementById('loadingOverlay').style.opacity = '0';
+  document.getElementById('loadingOverlay').style.pointerEvents = 'none';
+}
 
 init();
 </script>
