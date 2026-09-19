@@ -88,10 +88,10 @@
 <script>
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxD2igshVAwOHOBhBGkdDRsk1FAvSKOMKzK56XD14avXTaiy6DqGo_cjI1vu_R0Qn_X/exec';
 const GROUPS = {
-  taichung: { label:'台中', cls:'btc', names:['羿安','怡君','舒喬','Nana','Ines'] },
+  taichung: { label:'台中', cls:'btc', names:['怡君','舒喬','Nana','Ines'] },
   taipei:   { label:'台北', cls:'bt',  names:['Yuki','Maru','恒怡','涵涵'] }
 };
-const PART_TIME = ['羿安', '怡君'];
+const PART_TIME = ['怡君'];
 const WD = ['一','二','三','四','五','六','日'];
 const CACHE_PREFIX = 'laboShift.';
 const CACHE_SHEETS = CACHE_PREFIX + 'sheets';
@@ -331,7 +331,7 @@ function renderShift(v) {
 function getShiftStatus(v) {
   const text = String(v || '').trim();
   if (!text) return { type: 'empty', text, isOff: false };
-  if (text.includes('休')) return { type: 'off', text, isOff: true };
+  if (text.includes('休') || text.toLowerCase().includes('x')) return { type: 'off', text, isOff: true };
   if (text.includes('年')) return { type: 'annual', text, isOff: true };
   return { type: 'work', text, isOff: false };
 }
